@@ -604,110 +604,110 @@ with col_filtro2:
     tipos_voo_dist = ['Todos', 'DOMÉSTICA', 'INTERNACIONAL']
     tipo_voo_selecionado_dist = st.selectbox("Tipo de Voo:", tipos_voo_dist, key="tipo_voo_distancia")
 
-# Tabs
-tab1, tab2 = st.tabs(["📊 Por Empresa", "🛣️ Por Rota"])
-
-with tab1:
-    # WHERE dinâmico
-    where_conditions_dist = []
-    if empresa_selecionada_dist:
-        where_conditions_dist.append(f"v.empresa_sigla = '{empresa_selecionada_dist}'")
-    if tipo_voo_selecionado_dist != 'Todos':
-        where_conditions_dist.append(f"v.natureza = '{tipo_voo_selecionado_dist}'")
-
-    where_clause_dist = "WHERE " + " AND ".join(where_conditions_dist) if where_conditions_dist else ""
-
-    query_distancia_empresa = f"""
-    SELECT
-        v.empresa_sigla,
-        e.empresa_nome,
-        v.natureza,
-        SUM(v.distancia_voada_km) as distancia_total,
-        COUNT(*) as total_voos
-    FROM voo v
-    JOIN empresa e ON v.empresa_sigla = e.empresa_sigla
-    {where_clause_dist}
-    GROUP BY v.empresa_sigla, e.empresa_nome, v.natureza
-    ORDER BY distancia_total DESC
-    """
-
-    df_distancia_empresa = pd.read_sql_query(query_distancia_empresa, conn)
-
-    # Tratamento para combinar naturezas se necessário
-    if tipo_voo_selecionado_dist == 'Todos':
-        if not df_distancia_empresa.empty:
-            df_agregado = df_distancia_empresa.groupby(['empresa_sigla', 'empresa_nome']).agg(
-                distancia_total=('distancia_total', 'sum'),
-                total_voos=('total_voos', 'sum')
-            ).reset_index()
-            df_agregado['natureza'] = 'Total (Nac + Int)'
-            df_para_exibir = df_agregado
+    # Tabs
+    tab1, tab2 = st.tabs(["📊 Por Empresa", "🛣️ Por Rota"])
+    
+    with tab1:
+        # WHERE dinâmico
+        where_conditions_dist = []
+        if empresa_selecionada_dist:
+            where_conditions_dist.append(f"v.empresa_sigla = '{empresa_selecionada_dist}'")
+        if tipo_voo_selecionado_dist != 'Todos':
+            where_conditions_dist.append(f"v.natureza = '{tipo_voo_selecionado_dist}'")
+    
+        where_clause_dist = "WHERE " + " AND ".join(where_conditions_dist) if where_conditions_dist else ""
+    
+        query_distancia_empresa = f"""
+        SELECT
+            v.empresa_sigla,
+            e.empresa_nome,
+            v.natureza,
+            SUM(v.distancia_voada_km) as distancia_total,
+            COUNT(*) as total_voos
+        FROM voo v
+        JOIN empresa e ON v.empresa_sigla = e.empresa_sigla
+        {where_clause_dist}
+        GROUP BY v.empresa_sigla, e.empresa_nome, v.natureza
+        ORDER BY distancia_total DESC
+        """
+    
+        df_distancia_empresa = pd.read_sql_query(query_distancia_empresa, conn)
+    
+        # Tratamento para combinar naturezas se necessário
+        if tipo_voo_selecionado_dist == 'Todos':
+            if not df_distancia_empresa.empty:
+                df_agregado = df_distancia_empresa.groupby(['empresa_sigla', 'empresa_nome']).agg(
+                    distancia_total=('distancia_total', 'sum'),
+                    total_voos=('total_voos', 'sum')
+                ).reset_index()
+                df_agregado['natureza'] = 'Total (Nac + Int)'
+                df_para_exibir = df_agregado
+            else:
+                df_para_exibir = pd.DataFrame()
         else:
-            df_para_exibir = pd.DataFrame()
-    else:
-        df_para_exibir = df_distancia_empresa
-
-    # Exibição de resultados
-    if df_para_exibir.empty:
-        st.info("Nenhum dado encontrado para os filtros selecionados.")
-    else:
-        st.markdown("#### 🏆 Top 5 Empresas por Distância")
-        top_empresas = df_para_exibir.head(5)
-
-        cols = st.columns(len(top_empresas))
-        for i, (_, row) in enumerate(top_empresas.iterrows()):
-            natureza = row.get('natureza', 'TOTAL')
-            if natureza == 'DOMÉSTICA':
-                pill_style = "background-color: #275CBD; color: white;"
-            elif natureza == 'INTERNACIONAL':
-                pill_style = "background-color: #A4C4F5; color: #1c1b1f;"
-            else:
-                pill_style = "background-color: #3b82f6; color: white;"
-
-            with cols[i]:
-                st.markdown(f"""
-                <div class="custom-card">
-                    <p class="card-main-text" style="font-size: 1.1rem; color: #1e40af; margin-bottom: 0.5rem;"> {i+1}º {row['empresa_sigla']} </p>
-                    <span style='{pill_style} padding: 0.2rem 0.8rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; margin: 0.5rem 0;'>
-                        {natureza}
-                    </span>
-                    <p class="card-main-text" style="color: #1e40af;">{row['distancia_total']:,.0f} km</p>
-                    <p class="card-sub-text">{int(row['total_voos']):,} voos</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # Gráfico
-        st.markdown("<br>", unsafe_allow_html=True)
-        top_15_empresas = df_para_exibir.head(15)
-
-        fig_dist_empresa = px.bar(
-            top_15_empresas,
-            x='distancia_total',
-            y='empresa_sigla',
-            orientation='h',
-            color='natureza',
-            title='<b>Top 15 Empresas por Distância Total Voada</b>',
-            text='distancia_total',
-            color_discrete_map={
-                'DOMÉSTICA': "#275CBD",
-                'INTERNACIONAL': "#A4C4F5",
-                'Total (Nac + Int)': "#3b82f6"
-            }
-        )
-        fig_dist_empresa.update_layout(yaxis={'categoryorder':'total ascending'})
-        fig_dist_empresa.update_traces(
-            texttemplate='%{text:,.0f} km',
-            textposition='inside',
-            insidetextanchor='middle',
-            textfont_size=14
-        )
-        for trace in fig_dist_empresa.data:
-            if trace.name in ['DOMÉSTICA', 'Total (Nac + Int)']:
-                trace.textfont.color = 'white'
-            else:
-                trace.textfont.color = '#1c1b1f'
-
-        st.plotly_chart(fig_dist_empresa, use_container_width=True)
+            df_para_exibir = df_distancia_empresa
+    
+        # Exibição de resultados
+        if df_para_exibir.empty:
+            st.info("Nenhum dado encontrado para os filtros selecionados.")
+        else:
+            st.markdown("#### 🏆 Top 5 Empresas por Distância")
+            top_empresas = df_para_exibir.head(5)
+    
+            cols = st.columns(len(top_empresas))
+            for i, (_, row) in enumerate(top_empresas.iterrows()):
+                natureza = row.get('natureza', 'TOTAL')
+                if natureza == 'DOMÉSTICA':
+                    pill_style = "background-color: #275CBD; color: white;"
+                elif natureza == 'INTERNACIONAL':
+                    pill_style = "background-color: #A4C4F5; color: #1c1b1f;"
+                else:
+                    pill_style = "background-color: #3b82f6; color: white;"
+    
+                with cols[i]:
+                    st.markdown(f"""
+                    <div class="custom-card">
+                        <p class="card-main-text" style="font-size: 1.1rem; color: #1e40af; margin-bottom: 0.5rem;"> {i+1}º {row['empresa_sigla']} </p>
+                        <span style='{pill_style} padding: 0.2rem 0.8rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; margin: 0.5rem 0;'>
+                            {natureza}
+                        </span>
+                        <p class="card-main-text" style="color: #1e40af;">{row['distancia_total']:,.0f} km</p>
+                        <p class="card-sub-text">{int(row['total_voos']):,} voos</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+            # Gráfico
+            st.markdown("<br>", unsafe_allow_html=True)
+            top_15_empresas = df_para_exibir.head(15)
+    
+            fig_dist_empresa = px.bar(
+                top_15_empresas,
+                x='distancia_total',
+                y='empresa_sigla',
+                orientation='h',
+                color='natureza',
+                title='<b>Top 15 Empresas por Distância Total Voada</b>',
+                text='distancia_total',
+                color_discrete_map={
+                    'DOMÉSTICA': "#275CBD",
+                    'INTERNACIONAL': "#A4C4F5",
+                    'Total (Nac + Int)': "#3b82f6"
+                }
+            )
+            fig_dist_empresa.update_layout(yaxis={'categoryorder':'total ascending'})
+            fig_dist_empresa.update_traces(
+                texttemplate='%{text:,.0f} km',
+                textposition='inside',
+                insidetextanchor='middle',
+                textfont_size=14
+            )
+            for trace in fig_dist_empresa.data:
+                if trace.name in ['DOMÉSTICA', 'Total (Nac + Int)']:
+                    trace.textfont.color = 'white'
+                else:
+                    trace.textfont.color = '#1c1b1f'
+    
+            st.plotly_chart(fig_dist_empresa, use_container_width=True)
 
             st.markdown("#### 📋 Resumo por Empresa")
             st.dataframe(df_para_exibir, use_container_width=True)
